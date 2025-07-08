@@ -4,37 +4,91 @@
     <meta charset="UTF-8">
     <title>מסך מנחה</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        #results { margin-top: 50px; }
-        .bar { background-color: #5cb85c; color: white; padding: 5px; margin: 5px 0; text-align: left; transition: width 0.3s ease-in-out; }
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        #game-area { border: 2px solid #ccc; padding: 20px; min-height: 300px; }
+        #question { font-size: 2em; margin-bottom: 20px; }
+        #options div { font-size: 1.5em; margin: 10px; }
+        #timer { font-size: 2em; color: red; }
+        #controls { margin-top: 20px; }
+        button { font-size: 1.2em; padding: 10px 20px; margin: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>תוצאות בזמן אמת</h1>
-    <div id="results">
-        <div>תשובה 1: <span id="count1">0</span></div>
-        <div>תשובה 2: <span id="count2">0</span></div>
-        <div>תשובה 3: <span id="count3">0</span></div>
-        <div>תשובה 4: <span id="count4">0</span></div>
+    <h1>ניהול משחק טריוויה</h1>
+    
+    <div id="controls">
+        <button id="startBtn">התחל משחק</button>
+        <button id="nextQuestionBtn" style="display:none;">השאלה הבאה</button>
     </div>
+
+    <div id="game-area">
+        <h2 id="question">ברוכים הבאים! לחצו "התחל משחק"</h2>
+        <div id="options"></div>
+        <div id="timer"></div>
+    </div>
+
+    <hr>
+    <h2>תוצאות</h2>
+    <div id="results-display">
+        </div>
+    <h2>ניקוד</h2>
+    <div id="scores-display">
+        </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
 
-        socket.on('connect', () => {
-            console.log('מחובר לשרת עם ID:', socket.id);
+        const startBtn = document.getElementById('startBtn');
+        const nextQuestionBtn = document.getElementById('nextQuestionBtn');
+
+        startBtn.addEventListener('click', () => {
+            socket.emit('start_game');
+            startBtn.style.display = 'none';
+            nextQuestionBtn.style.display = 'inline-block';
         });
 
-        // האזנה לאירוע עדכון תוצאות מהשרת
-        socket.on('update_results', (results) => {
-            console.log('התקבל עדכון תוצאות:', results);
-            // עדכון המספרים על המסך
-            document.getElementById('count1').innerText = results['1'] || 0;
-            document.getElementById('count2').innerText = results['2'] || 0;
-            document.getElementById('count3').innerText = results['3'] || 0;
-            document.getElementById('count4').innerText = results['4'] || 0;
+        nextQuestionBtn.addEventListener('click', () => {
+            socket.emit('next_question');
         });
+
+        socket.on('show_question', (questionData) => {
+            document.getElementById('question').innerText = questionData.question;
+            
+            const optionsContainer = document.getElementById('options');
+            optionsContainer.innerHTML = '';
+            questionData.options.forEach((option, index) => {
+                optionsContainer.innerHTML += `<div>${index + 1}. ${option}</div>`;
+            });
+
+            // ניקוי תוצאות קודמות
+            document.getElementById('results-display').innerHTML = '';
+            
+            // טיפול בטיימר (כרגע רק תצוגה)
+            document.getElementById('timer').innerText = `זמן: ${questionData.timer} שניות`;
+        });
+        
+        socket.on('update_results', ({ votes, scores }) => {
+            const resultsContainer = document.getElementById('results-display');
+            resultsContainer.innerHTML = '<h3>הצבעות לשאלה הנוכחית:</h3>';
+            for (const [answer, count] of Object.entries(votes)) {
+                resultsContainer.innerHTML += `<div>תשובה ${answer}: ${count} קולות</div>`;
+            }
+
+            const scoresContainer = document.getElementById('scores-display');
+            scoresContainer.innerHTML = '<h3>לוח תוצאות כללי:</h3>';
+            for (const [player, score] of Object.entries(scores)) {
+                scoresContainer.innerHTML += `<div>${player}: ${score} נקודות</div>`;
+            }
+        });
+
+        socket.on('game_over', () => {
+            document.getElementById('question').innerText = "המשחק הסתיים!";
+            document.getElementById('options').innerHTML = '';
+            document.getElementById('timer').innerHTML = '';
+            nextQuestionBtn.style.display = 'none';
+        });
+
     </script>
 </body>
 </html>

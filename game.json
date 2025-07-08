@@ -1,0 +1,23 @@
+[
+  {
+    "question": "מהי בירת צרפת?",
+    "options": ["לונדון", "ברלין", "פריז", "מדריד"],
+    "correctAnswerIndex": 2,
+    "timer": 15,
+    "points": 100
+  },
+  {
+    "question": "באיזו שנה הכריזה ישראל על עצמאותה?",
+    "options": ["1947", "1948", "1949", "1950"],
+    "correctAnswerIndex": 1,
+    "timer": 10,
+    "points": 150
+  },
+  {
+    "question": "כמה כוכבי לכת יש במערכת השמש?",
+    "options": ["7", "8", "9", "10"],
+    "correctAnswerIndex": 1,
+    "timer": 20,
+    "points": 120
+  }
+]
