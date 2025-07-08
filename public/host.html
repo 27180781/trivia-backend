@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>מסך מנחה</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #results { margin-top: 50px; }
+        .bar { background-color: #5cb85c; color: white; padding: 5px; margin: 5px 0; text-align: left; transition: width 0.3s ease-in-out; }
+    </style>
+</head>
+<body>
+    <h1>תוצאות בזמן אמת</h1>
+    <div id="results">
+        <div>תשובה 1: <span id="count1">0</span></div>
+        <div>תשובה 2: <span id="count2">0</span></div>
+        <div>תשובה 3: <span id="count3">0</span></div>
+        <div>תשובה 4: <span id="count4">0</span></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('מחובר לשרת עם ID:', socket.id);
+        });
+
+        // האזנה לאירוע עדכון תוצאות מהשרת
+        socket.on('update_results', (results) => {
+            console.log('התקבל עדכון תוצאות:', results);
+            // עדכון המספרים על המסך
+            document.getElementById('count1').innerText = results['1'] || 0;
+            document.getElementById('count2').innerText = results['2'] || 0;
+            document.getElementById('count3').innerText = results['3'] || 0;
+            document.getElementById('count4').innerText = results['4'] || 0;
+        });
+    </script>
+</body>
+</html>

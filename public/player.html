@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>שלט הצבעה</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+        button { width: 80%; padding: 30px; margin: 10px; font-size: 24px; cursor: pointer; border: none; color: white; }
+        #btn1 { background-color: #d9534f; }
+        #btn2 { background-color: #5bc0de; }
+        #btn3 { background-color: #5cb85c; }
+        #btn4 { background-color: #f0ad4e; }
+    </style>
+</head>
+<body>
+    <h1>שלט הצבעה</h1>
+    <button id="btn1" onclick="sendVote(1)">1</button>
+    <button id="btn2" onclick="sendVote(2)">2</button>
+    <button id="btn3" onclick="sendVote(3)">3</button>
+    <button id="btn4" onclick="sendVote(4)">4</button>
+
+    <script>
+        async function sendVote(answer) {
+            // בעתיד, קוד המשחק יהיה דינמי
+            const gameId = 'game123'; 
+
+            try {
+                const response = await fetch('/api/vote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gameId: gameId, answer: answer })
+                });
+                if (response.ok) {
+                    alert('הצבעתך נקלטה!');
+                } else {
+                    alert('שגיאה בשליחת ההצבעה.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('שגיאת רשת.');
+            }
+        }
+    </script>
+</body>
+</html>
