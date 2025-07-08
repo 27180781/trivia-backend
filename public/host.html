@@ -4,91 +4,99 @@
     <meta charset="UTF-8">
     <title>מסך מנחה</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        #game-area { border: 2px solid #ccc; padding: 20px; min-height: 300px; }
-        #question { font-size: 2em; margin-bottom: 20px; }
-        #options div { font-size: 1.5em; margin: 10px; }
-        #timer { font-size: 2em; color: red; }
-        #controls { margin-top: 20px; }
-        button { font-size: 1.2em; padding: 10px 20px; margin: 5px; cursor: pointer; }
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background-color: #2c3e50; color: white; }
+        #game-area { border: 2px solid #3498db; padding: 20px; min-height: 400px; border-radius: 10px; }
+        #question { font-size: 2.5em; margin-bottom: 20px; }
+        #options div { font-size: 1.8em; margin: 15px; padding: 10px; border-radius: 5px; background-color: #34495e; }
+        #options div.correct { background-color: #2ecc71; color: black; }
+        #timer { font-size: 3em; color: #e74c3c; margin-top: 20px; }
+        #info { margin-top: 20px; font-size: 1.2em; color: #95a5a6; }
     </style>
 </head>
 <body>
     <h1>ניהול משחק טריוויה</h1>
-    
-    <div id="controls">
-        <button id="startBtn">התחל משחק</button>
-        <button id="nextQuestionBtn" style="display:none;">השאלה הבאה</button>
-    </div>
-
     <div id="game-area">
-        <h2 id="question">ברוכים הבאים! לחצו "התחל משחק"</h2>
+        <h2 id="question">לחץ על 'רווח' כדי להתחיל את המשחק</h2>
         <div id="options"></div>
         <div id="timer"></div>
     </div>
-
+    <div id="info">השתמש במקש הרווח כדי להתקדם בין השלבים</div>
     <hr>
-    <h2>תוצאות</h2>
-    <div id="results-display">
-        </div>
-    <h2>ניקוד</h2>
-    <div id="scores-display">
-        </div>
+    <h2>תוצאות ההצבעה</h2>
+    <div id="results-display"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+        let timerInterval;
 
-        const startBtn = document.getElementById('startBtn');
-        const nextQuestionBtn = document.getElementById('nextQuestionBtn');
-
-        startBtn.addEventListener('click', () => {
-            socket.emit('start_game');
-            startBtn.style.display = 'none';
-            nextQuestionBtn.style.display = 'inline-block';
+        // שלב 1: האזנה למקש הרווח
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                event.preventDefault(); // מונע התנהגות ברירת מחדל של הדפדפן
+                socket.emit('game_action', 'advance');
+            }
         });
 
-        nextQuestionBtn.addEventListener('click', () => {
-            socket.emit('next_question');
-        });
-
-        socket.on('show_question', (questionData) => {
-            document.getElementById('question').innerText = questionData.question;
-            
+        // שלב 2: טיפול באירועים מהשרת
+        socket.on('display_question', (data) => {
+            clearUi();
+            document.getElementById('question').innerText = data.question.question;
             const optionsContainer = document.getElementById('options');
-            optionsContainer.innerHTML = '';
-            questionData.options.forEach((option, index) => {
-                optionsContainer.innerHTML += `<div>${index + 1}. ${option}</div>`;
+            data.question.options.forEach((option, index) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.id = `option-${index}`;
+                optionDiv.innerText = `${index + 1}. ${option}`;
+                optionsContainer.appendChild(optionDiv);
             });
-
-            // ניקוי תוצאות קודמות
-            document.getElementById('results-display').innerHTML = '';
-            
-            // טיפול בטיימר (כרגע רק תצוגה)
-            document.getElementById('timer').innerText = `זמן: ${questionData.timer} שניות`;
         });
-        
-        socket.on('update_results', ({ votes, scores }) => {
+
+        socket.on('start_timer', (data) => {
+            let timeLeft = data.duration;
+            const timerEl = document.getElementById('timer');
+            timerEl.style.display = 'block';
+            timerEl.innerText = timeLeft;
+            
+            clearInterval(timerInterval); // נקה טיימר קודם אם היה
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerEl.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    timerEl.innerText = "הזמן נגמר!";
+                }
+            }, 1000);
+        });
+
+        socket.on('reveal_answer', (data) => {
+            clearInterval(timerInterval);
+            document.getElementById('timer').style.display = 'none';
+            const correctOptionEl = document.getElementById(`option-${data.correctAnswerIndex}`);
+            if (correctOptionEl) {
+                correctOptionEl.classList.add('correct');
+            }
+        });
+
+        socket.on('update_votes', (votes) => {
             const resultsContainer = document.getElementById('results-display');
             resultsContainer.innerHTML = '<h3>הצבעות לשאלה הנוכחית:</h3>';
             for (const [answer, count] of Object.entries(votes)) {
                 resultsContainer.innerHTML += `<div>תשובה ${answer}: ${count} קולות</div>`;
             }
-
-            const scoresContainer = document.getElementById('scores-display');
-            scoresContainer.innerHTML = '<h3>לוח תוצאות כללי:</h3>';
-            for (const [player, score] of Object.entries(scores)) {
-                scoresContainer.innerHTML += `<div>${player}: ${score} נקודות</div>`;
-            }
         });
 
         socket.on('game_over', () => {
+            clearUi();
             document.getElementById('question').innerText = "המשחק הסתיים!";
-            document.getElementById('options').innerHTML = '';
-            document.getElementById('timer').innerHTML = '';
-            nextQuestionBtn.style.display = 'none';
         });
 
+        function clearUi() {
+            document.getElementById('question').innerText = '';
+            document.getElementById('options').innerHTML = '';
+            document.getElementById('timer').style.display = 'none';
+            document.getElementById('results-display').innerHTML = '';
+            clearInterval(timerInterval);
+        }
     </script>
 </body>
 </html>

@@ -5,7 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>שלט הצבעה</title>
     <style>
-        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+        body { 
+            font-family: Arial, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            margin: 0; 
+            background-color: #f0f0f0; 
+            transition: background-color 0.1s ease; /* הוספת אנימציה למעבר צבע חלק */
+        }
         button { width: 80%; padding: 30px; margin: 10px; font-size: 24px; cursor: pointer; border: none; color: white; }
         #btn1 { background-color: #d9534f; }
         #btn2 { background-color: #5bc0de; }
@@ -24,21 +34,32 @@
         async function sendVote(answer) {
             // בעתיד, קוד המשחק יהיה דינמי
             const gameId = 'game123'; 
-
+            const originalColor = document.body.style.backgroundColor;
+            
             try {
                 const response = await fetch('/api/vote', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gameId: gameId, answer: answer })
                 });
+
                 if (response.ok) {
-                    alert('הצבעתך נקלטה!');
+                    // הצלחה: הבזק ירוק
+                    document.body.style.backgroundColor = '#2ecc71'; 
                 } else {
-                    alert('שגיאה בשליחת ההצבעה.');
+                    // שגיאה: הבזק אדום
+                    document.body.style.backgroundColor = '#e74c3c';
                 }
+
             } catch (error) {
                 console.error('Error:', error);
-                alert('שגיאת רשת.');
+                // שגיאת רשת: הבזק אדום
+                document.body.style.backgroundColor = '#e74c3c';
+            } finally {
+                // החזר את הצבע המקורי לאחר חצי שנייה
+                setTimeout(() => {
+                    document.body.style.backgroundColor = originalColor;
+                }, 500);
             }
         }
     </script>

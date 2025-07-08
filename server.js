@@ -4,106 +4,92 @@ const { Server } = require("socket.io");
 const Redis = require("ioredis");
 const fs = require('fs');
 
-// --- הגדרות ---
 const PORT = 80;
 const redis = new Redis({ host: 'srv-captain--trivia-redis', password: 'srv-captain--trivia-redis' });
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// --- טעינת המשחק ---
 const gameData = JSON.parse(fs.readFileSync('game.json', 'utf8'));
-// משתנה שיחזיק את המצב הנוכחי של המשחק
+
+// ניהול מצב המשחק בצורה מפורטת יותר
 let gameState = {
-    gameId: 'game123', // מזהה קבוע לדוגמה
+    gameId: 'game123',
     currentQuestionIndex: -1,
-    isQuestionActive: false
+    // Stages: waiting, question_revealed, voting, answer_revealed, finished
+    stage: 'waiting' 
 };
 
-// --- Middleware ---
 app.use(express.json());
 app.use(express.static('public'));
 
-// --- API Endpoint לקבלת הצבעות ---
 app.post('/api/vote', async (req, res) => {
-    // קבלת הצבעות רק כשהשאלה פעילה
-    if (!gameState.isQuestionActive) {
+    if (gameState.stage !== 'voting') {
         return res.status(403).send({ message: 'Voting is not active' });
     }
-
     try {
-        const { gameId, answer, playerId } = req.body; // בהמשך נוסיף playerId אמיתי
-        const currentQuestion = gameData[gameState.currentQuestionIndex];
-        
-        // שמירת ההצבעה (ספירת קולות)
-        await redis.hincrby(`votes:${gameId}:${gameState.currentQuestionIndex}`, answer, 1);
-        
-        // בדיקה אם התשובה נכונה והוספת ניקוד
-        if (parseInt(answer) === currentQuestion.correctAnswerIndex + 1) {
-            // ה-playerId כרגע הוא דמה, בעתיד יגיע מהמשתתף
-            const tempPlayerId = playerId || `player_${Math.floor(Math.random() * 1000)}`; 
-            await redis.hincrby(`scores:${gameId}`, tempPlayerId, currentQuestion.points);
-        }
-
-        // שליפת כל התוצאות והניקוד המעודכנים
-        const allVotes = await redis.hgetall(`votes:${gameId}:${gameState.currentQuestionIndex}`);
-        const allScores = await redis.hgetall(`scores:${gameId}`);
-
-        // שליחת עדכון למסך המנחה
-        io.emit('update_results', { votes: allVotes, scores: allScores });
-
+        const { gameId, answer } = req.body;
+        const votesKey = `votes:${gameId}:${gameState.currentQuestionIndex}`;
+        await redis.hincrby(votesKey, answer, 1);
+        const allVotes = await redis.hgetall(votesKey);
+        io.emit('update_votes', allVotes);
         res.status(200).send({ message: 'Vote received' });
-
     } catch (error) {
-        console.error('Error processing vote:', error);
         res.status(500).send({ message: 'Internal server error' });
     }
 });
 
-// --- Socket.IO - לוגיקת המשחק ---
 io.on('connection', (socket) => {
     console.log('Host connected:', socket.id);
 
-    // התחלת המשחק
-    socket.on('start_game', () => {
-        console.log('Game started');
-        gameState.currentQuestionIndex = 0;
-        gameState.isQuestionActive = true;
-        
-        // ניקוי תוצאות ישנות
-        redis.del(`votes:${gameState.gameId}:0`);
-        redis.del(`scores:${gameState.gameId}`);
-        
-        const question = gameData[0];
-        io.emit('show_question', question);
-    });
-    
-    // מעבר לשאלה הבאה
-    socket.on('next_question', () => {
-        if (gameState.currentQuestionIndex < gameData.length - 1) {
-            gameState.currentQuestionIndex++;
-            gameState.isQuestionActive = true;
+    // פונקציית שליטה מרכזית שמגיבה למקש הרווח
+    socket.on('game_action', async (action) => {
+        if (action !== 'advance') return;
+
+        switch (gameState.stage) {
+            case 'waiting':
+                // מתחילים את המשחק, מציגים את השאלה הראשונה
+                gameState.currentQuestionIndex = 0;
+                await redis.del(`votes:${gameState.gameId}:0`);
+                io.emit('display_question', { question: gameData[0] });
+                gameState.stage = 'question_revealed';
+                break;
+
+            case 'question_revealed':
+                // פותחים את ההצבעה ומפעילים את הטיימר
+                const currentQuestion = gameData[gameState.currentQuestionIndex];
+                io.emit('start_timer', { duration: currentQuestion.timer });
+                gameState.stage = 'voting';
+                break;
             
-            // ניקוי תוצאות הצבעה לשאלה החדשה
-            const newIndex = gameState.currentQuestionIndex;
-            redis.del(`votes:${gameState.gameId}:${newIndex}`);
+            case 'voting':
+                // חושפים את התשובה הנכונה
+                const correctIdx = gameData[gameState.currentQuestionIndex].correctAnswerIndex;
+                io.emit('reveal_answer', { correctAnswerIndex: correctIdx });
+                gameState.stage = 'answer_revealed';
+                break;
 
-            const question = gameData[newIndex];
-            io.emit('show_question', question);
-        } else {
-            // המשחק הסתיים
-            gameState.isQuestionActive = false;
-            io.emit('game_over');
-            console.log('Game over');
+            case 'answer_revealed':
+                // עוברים לשאלה הבאה
+                if (gameState.currentQuestionIndex < gameData.length - 1) {
+                    gameState.currentQuestionIndex++;
+                    const nextQuestionIndex = gameState.currentQuestionIndex;
+                    await redis.del(`votes:${gameState.gameId}:${nextQuestionIndex}`); // ניקוי הצבעות לשאלה הבאה
+                    io.emit('display_question', { question: gameData[nextQuestionIndex] });
+                    gameState.stage = 'question_revealed';
+                } else {
+                    // המשחק נגמר
+                    io.emit('game_over');
+                    gameState.stage = 'finished';
+                }
+                break;
         }
+        console.log(`New game stage: ${gameState.stage}`);
     });
 
-    socket.on('disconnect', () => {
-        console.log('Host disconnected:', socket.id);
-    });
+    socket.on('disconnect', () => { console.log('Host disconnected'); });
 });
 
-// --- הפעלת השרת ---
 server.listen(PORT, () => {
-    console.log(`🚀 Game server is live and listening on port ${PORT}`);
+    console.log(`🚀 Server is live and listening on port ${PORT}`);
 });
